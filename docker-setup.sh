@@ -26,11 +26,20 @@ OPENCLAW_WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
 
 mkdir -p "$OPENCLAW_CONFIG_DIR"
 mkdir -p "$OPENCLAW_WORKSPACE_DIR"
+mkdir -p "$OPENCLAW_CONFIG_DIR/ssh"
+
+# Setup SSH keys for CLI container access
+if [[ ! -f "$OPENCLAW_CONFIG_DIR/ssh/id_rsa" ]]; then
+  ssh-keygen -t rsa -N "" -f "$OPENCLAW_CONFIG_DIR/ssh/id_rsa" -C "openclaw-cli"
+  echo "SSH keys created at $OPENCLAW_CONFIG_DIR/ssh/"
+fi
 
 export OPENCLAW_CONFIG_DIR
 export OPENCLAW_WORKSPACE_DIR
+export OPENCLAW_SSH_PUBKEY="$OPENCLAW_CONFIG_DIR/ssh/id_rsa.pub"
 export OPENCLAW_GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
 export OPENCLAW_BRIDGE_PORT="${OPENCLAW_BRIDGE_PORT:-18790}"
+export OPENCLAW_CLI_SSH_PORT="${OPENCLAW_CLI_SSH_PORT:-2222}"
 export OPENCLAW_GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-lan}"
 export OPENCLAW_IMAGE="$IMAGE_NAME"
 export OPENCLAW_DOCKER_APT_PACKAGES="${OPENCLAW_DOCKER_APT_PACKAGES:-}"
@@ -163,19 +172,29 @@ upsert_env "$ENV_FILE" \
   OPENCLAW_WORKSPACE_DIR \
   OPENCLAW_GATEWAY_PORT \
   OPENCLAW_BRIDGE_PORT \
+  OPENCLAW_CLI_SSH_PORT \
   OPENCLAW_GATEWAY_BIND \
   OPENCLAW_GATEWAY_TOKEN \
+  OPENCLAW_SSH_PUBKEY \
   OPENCLAW_IMAGE \
   OPENCLAW_EXTRA_MOUNTS \
   OPENCLAW_HOME_VOLUME \
   OPENCLAW_DOCKER_APT_PACKAGES
 
 echo "==> Building Docker image: $IMAGE_NAME"
-docker build \
-  --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES}" \
-  -t "$IMAGE_NAME" \
-  -f "$ROOT_DIR/Dockerfile" \
-  "$ROOT_DIR"
+if docker version 2>&1 | grep -qi snap; then
+  echo "    (Detected snap Docker - using tar-based build to work around AppArmor restrictions)"
+  (cd "$ROOT_DIR" && tar czf - .) | docker build \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES}" \
+    -t "$IMAGE_NAME" \
+    -
+else
+  docker build \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES}" \
+    -t "$IMAGE_NAME" \
+    -f "$ROOT_DIR/Dockerfile" \
+    "$ROOT_DIR"
+fi
 
 echo ""
 echo "==> Onboarding (interactive)"
