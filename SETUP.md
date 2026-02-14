@@ -503,7 +503,7 @@ docker compose down
 # Stop and remove containers (but keep volumes)
 docker compose down
 
-# Containers are removed, but ~/.openclaw data persists
+# Containers are removed, but data persists on the NAS at $OPENCLAW_CONFIG_DIR
 # Restart anytime:
 docker compose up -d
 ```
