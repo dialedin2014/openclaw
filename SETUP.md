@@ -1,10 +1,10 @@
-# OpenClaw Docker Installation Guide
+# OpenClaw Docker Configuration
 
 This document explains the Docker-based installation of OpenClaw and how to use the CLI via the web chat interface.
 
 ## Overview
 
-This setup runs OpenClaw in a single Docker container:
+This setup runs the OpenClaw Gateway (named openclaw-gateway) in a one Docker container and a browser sandbox in another.
 
 - **openclaw-gateway**: Control plane with WebSocket server (port 18789), web UI, and CLI command execution
 
@@ -12,24 +12,46 @@ Configuration and workspace directories are shared via volume mounts.
 
 ## Local Values File (Not Committed)
 
-Create a local sidecar file named `SETUP.local.env` (ignored by git) with your machine-specific values:
+**IMPORTANT FOR AI ASSISTANTS:** All sensitive, machine-specific values (hostnames, IP addresses, usernames, file paths, etc.) MUST be placed in `SETUP.local.env`, NOT in `SETUP.md`. Use environment variable references like `$OPENCLAW_DOCKER_HOST` in SETUP.md. When adding new sensitive information, add the variable to SETUP.local.env first, then reference it in SETUP.md.
+
+Create a local sidecar file named `SETUP.local.env` in the repository root directory `$OPENCLAW_REPO_DIR` (ignored by git) with your machine-specific values:
 
 ```bash
+# Machine-specific configuration
 OPENCLAW_REPO_DIR="/path/to/openclaw"
 OPENCLAW_CONFIG_DIR="/path/to/openclaw/config"
 OPENCLAW_WORKSPACE_DIR="/path/to/openclaw/config/workspace"
+
+# Network topology
+OPENCLAW_DOCKER_HOST="<docker-host-hostname>"
+OPENCLAW_DEV_WORKSTATION="<workstation-hostname>"
 OPENCLAW_GATEWAY_HOST="<HOST_IP>"
 OPENCLAW_GATEWAY_USER="<USER>"
+
+# Docker image
 OPENCLAW_IMAGE="openclaw:local"
 ```
 
-Load it once per shell before running commands in this guide:
+### Loading Environment Variables
+
+Load the environment file once per shell session before running commands in this guide. Run this from the repository root directory (`$OPENCLAW_REPO_DIR`):
 
 ```bash
+cd "$OPENCLAW_REPO_DIR"
 set -a
 . ./SETUP.local.env
 set +a
 ```
+
+**For AI/LLM use:** To hydrate placeholders in this document, read `SETUP.local.env` and substitute `$VARIABLE_NAME` references with their actual values when providing commands or examples to the user.
+
+### Example Setup
+
+This documentation describes a setup where:
+- Development workstation (`$OPENCLAW_DEV_WORKSTATION`) connects via VS Code SSH to docker host (`$OPENCLAW_DOCKER_HOST`)
+- Docker host (`$OPENCLAW_DOCKER_HOST`) runs the OpenClaw gateway and sandbox browser containers
+- Gateway is accessible at `$OPENCLAW_GATEWAY_HOST` from the LAN
+- User `$OPENCLAW_GATEWAY_USER` has SSH access to the docker host
 
 ## Quick Start
 
@@ -75,23 +97,6 @@ Simply type commands in the chat, for example:
 The chat's exec tool runs commands directly in the gateway container.
 
 ## File Structure
-
-All data is stored under `$OPENCLAW_CONFIG_DIR`:
-
-```
-$OPENCLAW_CONFIG_DIR/
-├── openclaw.json           # Main configuration file
-├── agents/
-│   └── main/              # Default agent workspace
-│       ├── agent/         # Agent configuration & credentials
-│       └── sessions/      # Conversation sessions
-├── workspace/             # Agent workspace (accessible via VS Code SSH)
-├── devices/
-│   ├── paired.json        # Approved devices
-│   └── pending.json       # Pending pairing requests
-├── channels/              # Channel-specific state
-└── sandbox-browser/       # Sandbox browser profile data
-```
 
 **Note:** The `workspace/` directory is designed for collaborative editing. Files created by openclaw are automatically owned by the host user (UID 1000), making them directly accessible via VS Code's SSH plugin or other host-based editors. You can edit agent workspace files, profiles, and other data without permission issues.
 
@@ -203,53 +208,6 @@ openclaw devices reject <device-id>
 openclaw devices rotate <device-id> operator
 ```
 
-## Chrome Extension + Browser Relay Tunnel (Remote Workstation)
-
-If Chrome runs on a different machine than the Gateway, the browser relay runs on that LAN
-workstation. Use the tunnel script and install the extension locally on the workstation.
-
-### Install (workstation)
-
-Use the contents of `$OPENCLAW_CONFIG_DIR/chrome-extension` to
-set up the workstation.
-
-1. Copy the tunnel script to the workstation and make it executable:
-
-```bash
-cp "$OPENCLAW_CONFIG_DIR/chrome-extension/browser-relay-tunnel.sh" ~/
-chmod +x ~/browser-relay-tunnel.sh
-```
-
-2. Start the tunnel (uses `OPENCLAW_GATEWAY_HOST` and `OPENCLAW_GATEWAY_USER` from `SETUP.local.env`):
-
-```bash
-~/browser-relay-tunnel.sh start
-```
-
-3. Install the extension locally on the workstation (requires OpenClaw CLI installed there):
-
-```bash
-openclaw browser extension install
-openclaw browser extension path
-```
-
-4. Chrome → `chrome://extensions` → enable Developer mode → Load unpacked → select the printed path.
-
-5. In the extension Options, set the relay URL to `http://127.0.0.1:18792`.
-
-### Uninstall (workstation)
-
-1. Stop the tunnel:
-
-```bash
-~/browser-relay-tunnel.sh stop
-```
-
-2. Remove or disable the extension in `chrome://extensions` (there is no Chrome CLI uninstall).
-
-3. Optionally remove the extension folder printed by `openclaw browser extension path` and delete
-   the tunnel script from the workstation.
-
 ## Sandbox Browser (VNC + CDP)
 
 For browser automation requiring manual logins or full control, use the sandbox browser container. This provides a headful Chromium instance with VNC access for manual interaction and CDP (Chrome DevTools Protocol) for agent automation.
@@ -280,6 +238,8 @@ This setup enables:
 - `OPENCLAW_BROWSER_NOVNC_PORT` - noVNC web interface port (default: `6080`)
 - `OPENCLAW_BROWSER_ENABLE_NOVNC` - Enable noVNC web interface (default: `1`)
 - `OPENCLAW_BROWSER_HEADLESS` - Run in headless mode (default: `0`)
+- `OPENCLAW_BROWSER_SCREEN_RESOLUTION` - Screen resolution (default: `3840x2160`)
+- `OPENCLAW_BROWSER_WINDOW_SIZE` - Chromium window size (default: same as screen resolution)
 
 ### Starting the Sandbox Browser
 
@@ -310,6 +270,28 @@ Once logged in, the agent can control the browser via CDP using the persisted se
 > **Why manual login?** Sites with strict anti-bot defenses (X/Twitter, LinkedIn, banking) often block automated logins. Manual login via VNC establishes a trusted session that the agent can then use for automation tasks.
 >
 > See [docs/tools/browser-login.md](docs/tools/browser-login.md) for more details on manual login workflows.
+
+### Remote VNC Access
+
+If your dev workstation (`$OPENCLAW_DEV_WORKSTATION`) is on a different machine than the Docker host (`$OPENCLAW_DOCKER_HOST`), use a native VNC client over an SSH tunnel (faster than the browser UI). Load your `SETUP.local.env` values first.
+
+**Option A: PowerShell SSH tunnel (recommended)**
+
+```powershell
+ssh -L 5900:127.0.0.1:5900 $env:OPENCLAW_GATEWAY_USER@$env:OPENCLAW_GATEWAY_HOST
+```
+
+Then connect your VNC client to `127.0.0.1:5900` (no password).
+
+**Option B: VS Code port forwarding**
+
+1. From `$OPENCLAW_DEV_WORKSTATION`, connect to `$OPENCLAW_DOCKER_HOST` (at `$OPENCLAW_GATEWAY_HOST`) via VS Code SSH.
+2. Forward remote port `5900` to local port `5900`.
+3. Connect your VNC client to `127.0.0.1:5900`.
+
+**Option C: Direct LAN VNC (only if trusted network)**
+
+Connect your VNC client to `$OPENCLAW_GATEWAY_HOST:5900`.
 
 ### Connecting the Gateway to Sandbox Browser CDP
 
@@ -539,51 +521,14 @@ docker rmi openclaw:local
 rm -rf "$OPENCLAW_CONFIG_DIR"
 ```
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Host Machine (127.0.0.1)                                    │
-│                                                              │
-│  ~/.openclaw/  (volumes shared with containers)             │
-│  ├── openclaw.json                                          │
-│  ├── agents/                                                │
-│  ├── workspace/                                             │
-│  ├── devices/                                               │
-│  └── ssh/                                                   │
-│                                                              │
-│  Port 18789 → openclaw-gateway:18789 (Gateway WebSocket)    │
-│  Port 2222  → openclaw-cli:22 (SSH)                         │
-└─────────────────────────────────────────────────────────────┘
-           │                                  │
-           ▼                                  ▼
-┌──────────────────────────┐    ┌──────────────────────────┐
-│ openclaw-gateway         │    │ openclaw-cli             │
-│ (Docker Container)       │    │ (Docker Container)       │
-│                          │    │                          │
-│ - Node.js process        │    │ - SSH daemon             │
-│ - Gateway WS server      │    │ - Node.js CLI            │
-│ - Channel routers        │    │ - Interactive shell      │
-│ - Agent orchestrator     │    │ - Command execution      │
-└──────────────────────────┘    └──────────────────────────┘
-           │                                  │
-           └──────────────────┬───────────────┘
-                              │
-                    ┌─────────▼────────┐
-                    │ Docker Network   │
-                    │ 172.18.0.0/16    │
-                    └──────────────────┘
-```
-
 ## Tips & Best Practices
 
-1. **Use `./cli.sh` wrapper** for convenience instead of manually specifying SSH
-2. **Keep API keys secure** - never commit `~/.openclaw/auth-profiles.json` to git
-3. **Monitor gateway logs** during setup: `docker compose logs -f openclaw-gateway`
-4. **Use `--local` flag** when testing: `./cli.sh agent --local --message "test"`
-5. **Check `doctor`** before troubleshooting: `./cli.sh doctor` shows common issues
-6. **Backup configuration** before major changes: `cp -r "$OPENCLAW_CONFIG_DIR" "${OPENCLAW_CONFIG_DIR}.backup"`
-7. **Direct file editing** - The workspace directory is accessible via VS Code SSH thanks to matching UID configuration; edit files directly without copying in/out of containers
+1. **Keep API keys secure** - never commit `~/.openclaw/auth-profiles.json` to git
+1. **Monitor gateway logs** during setup: `docker compose logs -f openclaw-gateway`
+1. **Use `--local` flag** when testing: `./cli.sh agent --local --message "test"`
+1. **Check `doctor`** before troubleshooting: `./cli.sh doctor` shows common issues
+1. **Backup configuration** before major changes: `cp -r "$OPENCLAW_CONFIG_DIR" "${OPENCLAW_CONFIG_DIR}.backup"`
+1. **Direct file editing** - The workspace directory is accessible via VS Code SSH thanks to matching UID configuration; edit files directly without copying in/out of containers
 
 ## Further Reading
 

@@ -11,10 +11,16 @@ VNC_PORT="${OPENCLAW_BROWSER_VNC_PORT:-${CLAWDBOT_BROWSER_VNC_PORT:-5900}}"
 NOVNC_PORT="${OPENCLAW_BROWSER_NOVNC_PORT:-${CLAWDBOT_BROWSER_NOVNC_PORT:-6080}}"
 ENABLE_NOVNC="${OPENCLAW_BROWSER_ENABLE_NOVNC:-${CLAWDBOT_BROWSER_ENABLE_NOVNC:-1}}"
 HEADLESS="${OPENCLAW_BROWSER_HEADLESS:-${CLAWDBOT_BROWSER_HEADLESS:-0}}"
+SCREEN_RESOLUTION="${OPENCLAW_BROWSER_SCREEN_RESOLUTION:-3840x2160}"
+WINDOW_SIZE="${OPENCLAW_BROWSER_WINDOW_SIZE:-${SCREEN_RESOLUTION}}"
 
 mkdir -p "${HOME}" "${HOME}/.chrome" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}"
 
-Xvfb :1 -screen 0 1280x800x24 -ac -nolisten tcp &
+# Clear stale locks that can persist across container restarts.
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
+rm -f "${HOME}/.chrome/SingletonLock" "${HOME}/.chrome/SingletonSocket" "${HOME}/.chrome/SingletonCookie"
+
+Xvfb :1 -screen 0 "${SCREEN_RESOLUTION}x24" -ac -nolisten tcp &
 
 if [[ "${HEADLESS}" == "1" ]]; then
   CHROME_ARGS=(
@@ -35,6 +41,8 @@ CHROME_ARGS+=(
   "--remote-debugging-address=127.0.0.1"
   "--remote-debugging-port=${CHROME_CDP_PORT}"
   "--user-data-dir=${HOME}/.chrome"
+  "--window-size=${WINDOW_SIZE/x/,}"
+  "--start-maximized"
   "--no-first-run"
   "--no-default-browser-check"
   "--disable-dev-shm-usage"
