@@ -116,6 +116,7 @@ export function resolveSandboxDockerConfig(params: {
     memorySwap: agentDocker?.memorySwap ?? globalDocker?.memorySwap,
     cpus: agentDocker?.cpus ?? globalDocker?.cpus,
     ulimits,
+    noNewPrivileges: agentDocker?.noNewPrivileges ?? globalDocker?.noNewPrivileges,
     seccompProfile: agentDocker?.seccompProfile ?? globalDocker?.seccompProfile,
     apparmorProfile: agentDocker?.apparmorProfile ?? globalDocker?.apparmorProfile,
     dns: agentDocker?.dns ?? globalDocker?.dns,

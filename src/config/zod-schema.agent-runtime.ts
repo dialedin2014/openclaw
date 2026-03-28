@@ -127,6 +127,7 @@ export const SandboxDockerSchema = z
         ]),
       )
       .optional(),
+    noNewPrivileges: z.boolean().optional(),
     seccompProfile: z.string().optional(),
     apparmorProfile: z.string().optional(),
     dns: z.array(z.string()).optional(),

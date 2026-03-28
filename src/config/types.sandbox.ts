@@ -34,6 +34,8 @@ export type SandboxDockerSettings = {
    * Use "soft:hard" string, a number, or { soft, hard }.
    */
   ulimits?: Record<string, string | number | { soft?: number; hard?: number }>;
+  /** Set no-new-privileges on the container (default: true). Disable for snap Docker hosts. */
+  noNewPrivileges?: boolean;
   /** Seccomp profile (path or profile name). */
   seccompProfile?: string;
   /** AppArmor profile name. */
