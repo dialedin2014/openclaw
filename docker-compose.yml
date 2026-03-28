@@ -1,5 +1,10 @@
 services:
   openclaw-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OPENCLAW_INSTALL_DOCKER_CLI: "1"
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     container_name: dkr-oclaw-gtw
     user: "1000:1002"  # Run as node user with docker group for sandbox support
