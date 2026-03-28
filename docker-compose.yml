@@ -1,6 +1,7 @@
 services:
   openclaw-gateway:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: dkr-oclaw-gtw
     user: "1000:1002"  # Run as node user with docker group for sandbox support
     environment:
       HOME: /home/node
