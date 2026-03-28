@@ -1,14 +1,16 @@
-import OpenClawIPC
 import Foundation
+import OpenClawIPC
 import OSLog
 
-// Lightweight SemVer helper (major.minor.patch only) for gateway compatibility checks.
-struct Semver: Comparable, CustomStringConvertible, Sendable {
+/// Lightweight SemVer helper (major.minor.patch only) for gateway compatibility checks.
+struct Semver: Comparable, CustomStringConvertible {
     let major: Int
     let minor: Int
     let patch: Int
 
-    var description: String { "\(self.major).\(self.minor).\(self.patch)" }
+    var description: String {
+        "\(self.major).\(self.minor).\(self.patch)"
+    }
 
     static func < (lhs: Semver, rhs: Semver) -> Bool {
         if lhs.major != rhs.major { return lhs.major < rhs.major }
@@ -93,7 +95,7 @@ enum GatewayEnvironment {
         return (trimmed?.isEmpty == false) ? trimmed : nil
     }
 
-    // Exposed for tests so we can inject fake version checks without rewriting bundle metadata.
+    /// Exposed for tests so we can inject fake version checks without rewriting bundle metadata.
     static func expectedGatewayVersion(from versionString: String?) -> Semver? {
         Semver.parse(versionString)
     }
@@ -289,6 +291,17 @@ enum GatewayEnvironment {
 
     // MARK: - Internals
 
+    /// Exposed for tests so CLI version output normalization stays local to gateway checks.
+    static func normalizeGatewayVersionOutput(_ raw: String?) -> String? {
+        guard var normalized = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !normalized.isEmpty else {
+            return nil
+        }
+        if normalized.lowercased().hasPrefix("openclaw ") {
+            normalized = String(normalized.dropFirst("openclaw ".count))
+        }
+        return normalized
+    }
+
     private static func readGatewayVersion(binary: String) -> Semver? {
         let start = Date()
         let process = Process()
@@ -315,9 +328,8 @@ enum GatewayEnvironment {
                     bin=\(binary, privacy: .public)
                     """)
             }
-            let raw = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return Semver.parse(raw)
+            let raw = String(data: data, encoding: .utf8)
+            return Semver.parse(self.normalizeGatewayVersionOutput(raw))
         } catch {
             let elapsedMs = Int(Date().timeIntervalSince(start) * 1000)
             self.logger.error(

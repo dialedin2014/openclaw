@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
+import * as fences from "../markdown/fences.js";
+import { hasBalancedFences } from "../test-utils/chunk-test-helpers.js";
 import {
   chunkByNewline,
   chunkMarkdownText,
@@ -12,22 +13,7 @@ import {
 
 function expectFencesBalanced(chunks: string[]) {
   for (const chunk of chunks) {
-    let open: { markerChar: string; markerLen: number } | null = null;
-    for (const line of chunk.split("\n")) {
-      const match = line.match(/^( {0,3})(`{3,}|~{3,})(.*)$/);
-      if (!match) {
-        continue;
-      }
-      const marker = match[2];
-      if (!open) {
-        open = { markerChar: marker[0], markerLen: marker.length };
-        continue;
-      }
-      if (open.markerChar === marker[0] && marker.length >= open.markerLen) {
-        open = null;
-      }
-    }
-    expect(open).toBe(null);
+    expect(hasBalancedFences(chunk)).toBe(true);
   }
 }
 
@@ -39,10 +25,29 @@ type ChunkCase = {
 };
 
 function runChunkCases(chunker: (text: string, limit: number) => string[], cases: ChunkCase[]) {
-  for (const { name, text, limit, expected } of cases) {
-    it(name, () => {
-      expect(chunker(text, limit)).toEqual(expected);
-    });
+  it.each(cases)("$name", ({ text, limit, expected }) => {
+    expect(chunker(text, limit)).toEqual(expected);
+  });
+}
+
+function expectMarkdownFenceSplitCases(
+  cases: ReadonlyArray<{
+    name: string;
+    text: string;
+    limit: number;
+    expectedPrefix: string;
+    expectedSuffix: string;
+  }>,
+) {
+  for (const { name, text, limit, expectedPrefix, expectedSuffix } of cases) {
+    const chunks = chunkMarkdownText(text, limit);
+    expect(chunks.length, name).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length, name).toBeLessThanOrEqual(limit);
+      expect(chunk.startsWith(expectedPrefix), name).toBe(true);
+      expect(chunk.trimEnd().endsWith(expectedSuffix), name).toBe(true);
+    }
+    expectFencesBalanced(chunks);
   }
 }
 
@@ -169,56 +174,39 @@ describe("chunkMarkdownText", () => {
     expectFencesBalanced(chunks);
   });
 
-  it("reopens fenced blocks when forced to split inside them", () => {
-    const text = `\`\`\`txt\n${"a".repeat(500)}\n\`\`\``;
-    const limit = 120;
-    const chunks = chunkMarkdownText(text, limit);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) {
-      expect(chunk.length).toBeLessThanOrEqual(limit);
-      expect(chunk.startsWith("```txt\n")).toBe(true);
-      expect(chunk.trimEnd().endsWith("```")).toBe(true);
-    }
-    expectFencesBalanced(chunks);
-  });
+  it("handles multiple fence marker styles when splitting inside fences", () => {
+    const cases = [
+      {
+        name: "backtick fence",
+        text: `\`\`\`txt\n${"a".repeat(500)}\n\`\`\``,
+        limit: 120,
+        expectedPrefix: "```txt\n",
+        expectedSuffix: "```",
+      },
+      {
+        name: "tilde fence",
+        text: `~~~sh\n${"x".repeat(600)}\n~~~`,
+        limit: 140,
+        expectedPrefix: "~~~sh\n",
+        expectedSuffix: "~~~",
+      },
+      {
+        name: "long backtick fence",
+        text: `\`\`\`\`md\n${"y".repeat(600)}\n\`\`\`\``,
+        limit: 140,
+        expectedPrefix: "````md\n",
+        expectedSuffix: "````",
+      },
+      {
+        name: "indented fence",
+        text: `  \`\`\`js\n  ${"z".repeat(600)}\n  \`\`\``,
+        limit: 160,
+        expectedPrefix: "  ```js\n",
+        expectedSuffix: "  ```",
+      },
+    ] as const;
 
-  it("supports tilde fences", () => {
-    const text = `~~~sh\n${"x".repeat(600)}\n~~~`;
-    const limit = 140;
-    const chunks = chunkMarkdownText(text, limit);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) {
-      expect(chunk.length).toBeLessThanOrEqual(limit);
-      expect(chunk.startsWith("~~~sh\n")).toBe(true);
-      expect(chunk.trimEnd().endsWith("~~~")).toBe(true);
-    }
-    expectFencesBalanced(chunks);
-  });
-
-  it("supports longer fence markers for close", () => {
-    const text = `\`\`\`\`md\n${"y".repeat(600)}\n\`\`\`\``;
-    const limit = 140;
-    const chunks = chunkMarkdownText(text, limit);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) {
-      expect(chunk.length).toBeLessThanOrEqual(limit);
-      expect(chunk.startsWith("````md\n")).toBe(true);
-      expect(chunk.trimEnd().endsWith("````")).toBe(true);
-    }
-    expectFencesBalanced(chunks);
-  });
-
-  it("preserves indentation for indented fences", () => {
-    const text = `  \`\`\`js\n  ${"z".repeat(600)}\n  \`\`\``;
-    const limit = 160;
-    const chunks = chunkMarkdownText(text, limit);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) {
-      expect(chunk.length).toBeLessThanOrEqual(limit);
-      expect(chunk.startsWith("  ```js\n")).toBe(true);
-      expect(chunk.trimEnd().endsWith("  ```")).toBe(true);
-    }
-    expectFencesBalanced(chunks);
+    expectMarkdownFenceSplitCases(cases);
   });
 
   it("never produces an empty fenced chunk when splitting", () => {
@@ -239,6 +227,17 @@ describe("chunkMarkdownText", () => {
     const chunks = chunkMarkdownText(text, 20);
     expect(chunks[0]?.length).toBe(20);
     expect(chunks.join("")).toBe(text);
+  });
+
+  it("parses fence spans once for long fenced payloads", () => {
+    const parseSpy = vi.spyOn(fences, "parseFenceSpans");
+    const text = `\`\`\`txt\n${"line\n".repeat(600)}\`\`\``;
+
+    const chunks = chunkMarkdownText(text, 80);
+
+    expect(chunks.length).toBeGreaterThan(2);
+    expect(parseSpy).toHaveBeenCalledTimes(1);
+    parseSpy.mockRestore();
   });
 });
 
@@ -284,12 +283,8 @@ describe("chunkByNewline", () => {
     expect(chunks).toEqual([text]);
   });
 
-  it("returns empty array for empty input", () => {
-    expect(chunkByNewline("", 100)).toEqual([]);
-  });
-
-  it("returns empty array for whitespace-only input", () => {
-    expect(chunkByNewline("   \n\n   ", 100)).toEqual([]);
+  it.each(["", "   \n\n   "] as const)("returns empty array for input %j", (text) => {
+    expect(chunkByNewline(text, 100)).toEqual([]);
   });
 
   it("preserves trailing blank lines on the last chunk", () => {
@@ -306,83 +301,97 @@ describe("chunkByNewline", () => {
 });
 
 describe("chunkTextWithMode", () => {
-  it("uses length-based chunking for length mode", () => {
-    const text = "Line one\nLine two";
-    const chunks = chunkTextWithMode(text, 1000, "length");
-    expect(chunks).toEqual(["Line one\nLine two"]);
-  });
-
-  it("uses paragraph-based chunking for newline mode", () => {
-    const text = "Line one\nLine two";
-    const chunks = chunkTextWithMode(text, 1000, "newline");
-    expect(chunks).toEqual(["Line one\nLine two"]);
-  });
-
-  it("splits on blank lines for newline mode", () => {
-    const text = "Para one\n\nPara two";
-    const chunks = chunkTextWithMode(text, 1000, "newline");
-    expect(chunks).toEqual(["Para one", "Para two"]);
-  });
+  it.each([
+    {
+      name: "length mode",
+      text: "Line one\nLine two",
+      mode: "length" as const,
+      expected: ["Line one\nLine two"],
+    },
+    {
+      name: "newline mode (single paragraph)",
+      text: "Line one\nLine two",
+      mode: "newline" as const,
+      expected: ["Line one\nLine two"],
+    },
+    {
+      name: "newline mode (blank-line split)",
+      text: "Para one\n\nPara two",
+      mode: "newline" as const,
+      expected: ["Para one", "Para two"],
+    },
+  ] as const)(
+    "applies mode-specific chunking behavior: $name",
+    ({ text, mode, expected, name }) => {
+      expect(chunkTextWithMode(text, 1000, mode), name).toEqual(expected);
+    },
+  );
 });
 
 describe("chunkMarkdownTextWithMode", () => {
-  it("uses markdown-aware chunking for length mode", () => {
-    const text = "Line one\nLine two";
-    expect(chunkMarkdownTextWithMode(text, 1000, "length")).toEqual(chunkMarkdownText(text, 1000));
+  it.each([
+    {
+      name: "length mode uses markdown-aware chunker",
+      text: "Line one\nLine two",
+      mode: "length" as const,
+      expected: chunkMarkdownText("Line one\nLine two", 1000),
+    },
+    {
+      name: "newline mode keeps single paragraph",
+      text: "Line one\nLine two",
+      mode: "newline" as const,
+      expected: ["Line one\nLine two"],
+    },
+    {
+      name: "newline mode splits by blank line",
+      text: "Para one\n\nPara two",
+      mode: "newline" as const,
+      expected: ["Para one", "Para two"],
+    },
+  ] as const)("applies markdown/newline mode behavior: $name", ({ text, mode, expected, name }) => {
+    expect(chunkMarkdownTextWithMode(text, 1000, mode), name).toEqual(expected);
   });
 
-  it("uses paragraph-based chunking for newline mode", () => {
-    const text = "Line one\nLine two";
-    expect(chunkMarkdownTextWithMode(text, 1000, "newline")).toEqual(["Line one\nLine two"]);
-  });
-
-  it("splits on blank lines for newline mode", () => {
-    const text = "Para one\n\nPara two";
-    expect(chunkMarkdownTextWithMode(text, 1000, "newline")).toEqual(["Para one", "Para two"]);
-  });
-
-  it("does not split single-newline code fences in newline mode", () => {
-    const text = "```js\nconst a = 1;\nconst b = 2;\n```\nAfter";
-    expect(chunkMarkdownTextWithMode(text, 1000, "newline")).toEqual([text]);
-  });
-
-  it("defers long markdown paragraphs to markdown chunking in newline mode", () => {
-    const text = `\`\`\`js\n${"const a = 1;\n".repeat(20)}\`\`\``;
-    expect(chunkMarkdownTextWithMode(text, 40, "newline")).toEqual(chunkMarkdownText(text, 40));
-  });
-
-  it("does not split on blank lines inside a fenced code block", () => {
-    const text = "```python\ndef my_function():\n    x = 1\n\n    y = 2\n    return x + y\n```";
-    expect(chunkMarkdownTextWithMode(text, 1000, "newline")).toEqual([text]);
-  });
-
-  it("splits on blank lines between a code fence and following paragraph", () => {
+  it("handles newline mode fence splitting rules", () => {
     const fence = "```python\ndef my_function():\n    x = 1\n\n    y = 2\n    return x + y\n```";
-    const text = `${fence}\n\nAfter`;
-    expect(chunkMarkdownTextWithMode(text, 1000, "newline")).toEqual([fence, "After"]);
+    const longFence = `\`\`\`js\n${"const a = 1;\n".repeat(20)}\`\`\``;
+    const cases = [
+      {
+        name: "keeps single-newline fence+paragraph together",
+        text: "```js\nconst a = 1;\nconst b = 2;\n```\nAfter",
+        limit: 1000,
+        expected: ["```js\nconst a = 1;\nconst b = 2;\n```\nAfter"],
+      },
+      {
+        name: "keeps blank lines inside fence together",
+        text: fence,
+        limit: 1000,
+        expected: [fence],
+      },
+      {
+        name: "splits between fence and following paragraph",
+        text: `${fence}\n\nAfter`,
+        limit: 1000,
+        expected: [fence, "After"],
+      },
+      {
+        name: "defers long markdown blocks to markdown chunker",
+        text: longFence,
+        limit: 40,
+        expected: chunkMarkdownText(longFence, 40),
+      },
+    ] as const;
+
+    for (const { text, limit, expected, name } of cases) {
+      expect(chunkMarkdownTextWithMode(text, limit, "newline"), name).toEqual(expected);
+    }
   });
 });
 
 describe("resolveChunkMode", () => {
-  it("returns length as default", () => {
-    expect(resolveChunkMode(undefined, "telegram")).toBe("length");
-    expect(resolveChunkMode({}, "discord")).toBe("length");
-    expect(resolveChunkMode(undefined, "bluebubbles")).toBe("length");
-  });
-
-  it("returns length for internal channel", () => {
-    const cfg = { channels: { bluebubbles: { chunkMode: "newline" as const } } };
-    expect(resolveChunkMode(cfg, "__internal__")).toBe("length");
-  });
-
-  it("supports provider-level overrides for slack", () => {
-    const cfg = { channels: { slack: { chunkMode: "newline" as const } } };
-    expect(resolveChunkMode(cfg, "slack")).toBe("newline");
-    expect(resolveChunkMode(cfg, "discord")).toBe("length");
-  });
-
-  it("supports account-level overrides for slack", () => {
-    const cfg = {
+  it("resolves default, provider, account, and internal channel modes", () => {
+    const providerCfg = { channels: { slack: { chunkMode: "newline" as const } } };
+    const accountCfg = {
       channels: {
         slack: {
           chunkMode: "length" as const,
@@ -392,7 +401,19 @@ describe("resolveChunkMode", () => {
         },
       },
     };
-    expect(resolveChunkMode(cfg, "slack", "primary")).toBe("newline");
-    expect(resolveChunkMode(cfg, "slack", "other")).toBe("length");
+    const cases = [
+      { cfg: undefined, provider: "telegram", accountId: undefined, expected: "length" },
+      { cfg: {}, provider: "discord", accountId: undefined, expected: "length" },
+      { cfg: undefined, provider: "bluebubbles", accountId: undefined, expected: "length" },
+      { cfg: providerCfg, provider: "__internal__", accountId: undefined, expected: "length" },
+      { cfg: providerCfg, provider: "slack", accountId: undefined, expected: "newline" },
+      { cfg: providerCfg, provider: "discord", accountId: undefined, expected: "length" },
+      { cfg: accountCfg, provider: "slack", accountId: "primary", expected: "newline" },
+      { cfg: accountCfg, provider: "slack", accountId: "other", expected: "length" },
+    ] as const;
+
+    for (const { cfg, provider, accountId, expected } of cases) {
+      expect(resolveChunkMode(cfg as never, provider, accountId)).toBe(expected);
+    }
   });
 });

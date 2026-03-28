@@ -1,5 +1,5 @@
-import type { OpenClawConfig } from "../config/config.js";
 import type { MsgContext } from "../auto-reply/templating.js";
+import type { OpenClawConfig } from "../config/config.js";
 import type {
   MediaUnderstandingConfig,
   MediaUnderstandingModelConfig,
@@ -12,7 +12,7 @@ import {
   DEFAULT_MEDIA_CONCURRENCY,
   DEFAULT_PROMPT,
 } from "./defaults.js";
-import { normalizeMediaProviderId } from "./providers/index.js";
+import { normalizeMediaProviderId } from "./provider-id.js";
 import { normalizeMediaUnderstandingChatType, resolveMediaUnderstandingScope } from "./scope.js";
 import type { MediaUnderstandingCapability } from "./types.js";
 

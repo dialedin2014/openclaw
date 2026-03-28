@@ -1,5 +1,5 @@
 ---
-summary: "ClawHub guide: public skills registry + CLI workflows"
+summary: "ClawHub guide: public registry, native OpenClaw install flows, and ClawHub CLI workflows"
 read_when:
   - Introducing ClawHub to new users
   - Installing, searching, or publishing skills
@@ -9,9 +9,61 @@ title: "ClawHub"
 
 # ClawHub
 
-ClawHub is the **public skill registry for OpenClaw**. It is a free service: all skills are public, open, and visible to everyone for sharing and reuse. A skill is just a folder with a `SKILL.md` file (plus supporting text files). You can browse skills in the web app or use the CLI to search, install, update, and publish skills.
+ClawHub is the public registry for **OpenClaw skills and plugins**.
 
-Site: [clawhub.com](https://clawhub.com)
+- Use native `openclaw` commands to search/install/update skills and install
+  plugins from ClawHub.
+- Use the separate `clawhub` CLI when you need registry auth, publish, delete,
+  undelete, or sync workflows.
+
+Site: [clawhub.ai](https://clawhub.ai)
+
+## Native OpenClaw flows
+
+Skills:
+
+```bash
+openclaw skills search "calendar"
+openclaw skills install <skill-slug>
+openclaw skills update --all
+```
+
+Plugins:
+
+```bash
+openclaw plugins install clawhub:<package>
+openclaw plugins update --all
+```
+
+Bare npm-safe plugin specs are also tried against ClawHub before npm:
+
+```bash
+openclaw plugins install openclaw-codex-app-server
+```
+
+Native `openclaw` commands install into your active workspace and persist source
+metadata so later `update` calls can stay on ClawHub.
+
+## What ClawHub is
+
+- A public registry for OpenClaw skills.
+- A versioned store of skill bundles and metadata.
+- A discovery surface for search, tags, and usage signals.
+
+## How it works
+
+1. A user publishes a skill bundle (files + metadata).
+2. ClawHub stores the bundle, parses metadata, and assigns a version.
+3. The registry indexes the skill for search and discovery.
+4. Users browse, download, and install skills in OpenClaw.
+
+## What you can do
+
+- Publish new skills and new versions of existing skills.
+- Discover skills by name, tags, or search.
+- Download skill bundles and inspect their files.
+- Report skills that are abusive or unsafe.
+- If you are a moderator, hide, unhide, delete, or ban.
 
 ## Who this is for (beginner-friendly)
 
@@ -24,16 +76,17 @@ If you want to add new capabilities to your OpenClaw agent, ClawHub is the easie
 
 ## Quick start (non-technical)
 
-1. Install the CLI (see next section).
-2. Search for something you need:
-   - `clawhub search "calendar"`
-3. Install a skill:
-   - `clawhub install <skill-slug>`
-4. Start a new OpenClaw session so it picks up the new skill.
+1. Search for something you need:
+   - `openclaw skills search "calendar"`
+2. Install a skill:
+   - `openclaw skills install <skill-slug>`
+3. Start a new OpenClaw session so it picks up the new skill.
+4. If you want to publish or manage registry auth, install the separate
+   `clawhub` CLI too.
 
-## Install the CLI
+## Install the ClawHub CLI
 
-Pick one:
+You only need this for registry-authenticated workflows such as publish/sync:
 
 ```bash
 npm i -g clawhub
@@ -45,10 +98,35 @@ pnpm add -g clawhub
 
 ## How it fits into OpenClaw
 
-By default, the CLI installs skills into `./skills` under your current working directory. If a OpenClaw workspace is configured, `clawhub` falls back to that workspace unless you override `--workdir` (or `CLAWHUB_WORKDIR`). OpenClaw loads workspace skills from `<workspace>/skills` and will pick them up in the **next** session. If you already use `~/.openclaw/skills` or bundled skills, workspace skills take precedence.
+Native `openclaw skills install` installs into the active workspace `skills/`
+directory. `openclaw plugins install clawhub:...` records a normal managed
+plugin install plus ClawHub source metadata for updates.
+
+The separate `clawhub` CLI also installs skills into `./skills` under your
+current working directory. If an OpenClaw workspace is configured, `clawhub`
+falls back to that workspace unless you override `--workdir` (or
+`CLAWHUB_WORKDIR`). OpenClaw loads workspace skills from `<workspace>/skills`
+and will pick them up in the **next** session. If you already use
+`~/.openclaw/skills` or bundled skills, workspace skills take precedence.
 
 For more detail on how skills are loaded, shared, and gated, see
 [Skills](/tools/skills).
+
+## Skill system overview
+
+A skill is a versioned bundle of files that teaches OpenClaw how to perform a
+specific task. Each publish creates a new version, and the registry keeps a
+history of versions so users can audit changes.
+
+A typical skill includes:
+
+- A `SKILL.md` file with the primary description and usage.
+- Optional configs, scripts, or supporting files used by the skill.
+- Metadata such as tags, summary, and install requirements.
+
+ClawHub uses metadata to power discovery and safely expose skill capabilities.
+The registry also tracks usage signals (such as stars and downloads) to improve
+ranking and visibility.
 
 ## What the service provides (features)
 
@@ -59,6 +137,24 @@ For more detail on how skills are loaded, shared, and gated, see
 - **Stars and comments** for community feedback.
 - **Moderation** hooks for approvals and audits.
 - **CLI-friendly API** for automation and scripting.
+
+## Security and moderation
+
+ClawHub is open by default. Anyone can upload skills, but a GitHub account must
+be at least one week old to publish. This helps slow down abuse without blocking
+legitimate contributors.
+
+Reporting and moderation:
+
+- Any signed in user can report a skill.
+- Report reasons are required and recorded.
+- Each user can have up to 20 active reports at a time.
+- Skills with more than 3 unique reports are auto hidden by default.
+- Moderators can view hidden skills, unhide them, delete them, or ban users.
+- Abusing the report feature can result in account bans.
+
+Interested in becoming a moderator? Ask in the OpenClaw Discord and contact a
+moderator or maintainer.
 
 ## CLI commands and parameters
 

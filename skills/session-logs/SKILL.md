@@ -1,7 +1,31 @@
 ---
 name: session-logs
 description: Search and analyze your own session logs (older/parent conversations) using jq.
-metadata: { "openclaw": { "emoji": "📜", "requires": { "bins": ["jq", "rg"] } } }
+metadata:
+  {
+    "openclaw":
+      {
+        "emoji": "📜",
+        "requires": { "bins": ["jq", "rg"] },
+        "install":
+          [
+            {
+              "id": "brew-jq",
+              "kind": "brew",
+              "formula": "jq",
+              "bins": ["jq"],
+              "label": "Install jq (brew)",
+            },
+            {
+              "id": "brew-rg",
+              "kind": "brew",
+              "formula": "ripgrep",
+              "bins": ["rg"],
+              "label": "Install ripgrep (brew)",
+            },
+          ],
+      },
+  }
 ---
 
 # session-logs
@@ -10,7 +34,7 @@ Search your complete conversation history stored in session JSONL files. Use thi
 
 ## Trigger
 
-Use this skill when the user asks about prior chats, parent conversations, or historical context that isn’t in memory files.
+Use this skill when the user asks about prior chats, parent conversations, or historical context that isn't in memory files.
 
 ## Location
 
