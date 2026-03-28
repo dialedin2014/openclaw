@@ -26,7 +26,9 @@ RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/
 
 COPY --chmod=755 scripts/sandbox-browser-entrypoint.sh /usr/local/bin/openclaw-sandbox-browser
 
-RUN useradd --create-home --shell /bin/bash sandbox
+RUN useradd --create-home --shell /bin/bash sandbox \
+    && mkdir -p /tmp/openclaw-home \
+    && chown sandbox:sandbox /tmp/openclaw-home
 USER sandbox
 WORKDIR /home/sandbox
 
