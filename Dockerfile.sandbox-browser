@@ -13,8 +13,12 @@ RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/
     ca-certificates \
     chromium \
     curl \
+    fontconfig \
     fonts-liberation \
     fonts-noto-color-emoji \
+    fonts-noto-core \
+    fonts-noto-extra \
+    fonts-open-sans \
     git \
     jq \
     novnc \
@@ -23,6 +27,11 @@ RUN --mount=type=cache,id=openclaw-sandbox-bookworm-apt-cache,target=/var/cache/
     websockify \
     x11vnc \
     xvfb
+
+# Configure fontconfig: grayscale antialiasing + full hinting (works over VNC)
+RUN mkdir -p /etc/fonts \
+  && printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n<fontconfig>\n  <match target="font">\n    <edit name="antialias" mode="assign"><bool>true</bool></edit>\n    <edit name="hinting" mode="assign"><bool>true</bool></edit>\n    <edit name="hintstyle" mode="assign"><const>hintfull</const></edit>\n    <edit name="rgba" mode="assign"><const>none</const></edit>\n    <edit name="lcdfilter" mode="assign"><const>lcddefault</const></edit>\n  </match>\n  <!-- Prefer Noto Sans for web pages -->\n  <alias>\n    <family>sans-serif</family>\n    <prefer><family>Noto Sans</family></prefer>\n  </alias>\n</fontconfig>\n' > /etc/fonts/local.conf \
+  && fc-cache -f
 
 COPY --chmod=755 scripts/sandbox-browser-entrypoint.sh /usr/local/bin/openclaw-sandbox-browser
 
